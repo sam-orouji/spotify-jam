@@ -1,18 +1,13 @@
 const clientId = "ac5aa309cebb46d6b014da02440d5918";
-const urlParams = new URLSearchParams(window.location.search);
-const code = urlParams.get("code"); // Extract the authorization code from the URL
+const params = new URLSearchParams(window.location.search);
+const code = params.get("code");
 
 if (!code) {
   redirectToAuthCodeFlow(clientId);
 } else {
-  getAccessToken(clientId, code).then(async (accessToken) => {
-    const profile = await fetchProfile(accessToken);
-    populateUI(profile);
-    console.log(profile.display_name);
-    const topTracks = await getTopTracks(accessToken);
-    displayTopTracks(topTracks);
-    history.pushState({}, null, "/"); // Clean the URL after getting the token
-  });
+  const accessToken = await getAccessToken(clientId, code);
+  const profile = await fetchProfile(accessToken);
+  populateUI(profile);
 }
 
 export async function redirectToAuthCodeFlow(clientId) {
@@ -24,13 +19,12 @@ export async function redirectToAuthCodeFlow(clientId) {
   const params = new URLSearchParams();
   params.append("client_id", clientId);
   params.append("response_type", "code");
-  params.append("redirect_uri", "http://localhost:5173/callback");
+  params.append("redirect_uri", "http://localhost:5174/callback");
   params.append("scope", "user-read-private user-read-email");
   params.append("code_challenge_method", "S256");
   params.append("code_challenge", challenge);
 
   document.location = `https://accounts.spotify.com/authorize?${params.toString()}`;
-  console.log(document.location);
 }
 
 function generateCodeVerifier(length) {
@@ -53,14 +47,14 @@ async function generateCodeChallenge(codeVerifier) {
     .replace(/=+$/, "");
 }
 
-async function getAccessToken(clientId, code) {
+export async function getAccessToken(clientId, code) {
   const verifier = localStorage.getItem("verifier");
 
   const params = new URLSearchParams();
   params.append("client_id", clientId);
   params.append("grant_type", "authorization_code");
   params.append("code", code);
-  params.append("redirect_uri", "http://localhost:5173/callback");
+  params.append("redirect_uri", "http://localhost:5174/callback");
   params.append("code_verifier", verifier);
 
   const result = await fetch("https://accounts.spotify.com/api/token", {
@@ -70,7 +64,6 @@ async function getAccessToken(clientId, code) {
   });
 
   const { access_token } = await result.json();
-  console.log("Access token: ", access_token);
   return access_token;
 }
 
@@ -85,7 +78,13 @@ async function fetchProfile(token) {
 
 function populateUI(profile) {
   document.getElementById("displayName").innerText = profile.display_name;
-
+  console.log(profile.display_name);
+  if (profile.images[0]) {
+    const profileImage = new Image(200, 200);
+    profileImage.src = profile.images[0].url;
+    document.getElementById("avatar").appendChild(profileImage);
+    document.getElementById("imgUrl").innerText = profile.images[0].url;
+  }
   document.getElementById("id").innerText = profile.id;
   document.getElementById("email").innerText = profile.email;
   document.getElementById("uri").innerText = profile.uri;
@@ -94,50 +93,4 @@ function populateUI(profile) {
     .setAttribute("href", profile.external_urls.spotify);
   document.getElementById("url").innerText = profile.href;
   document.getElementById("url").setAttribute("href", profile.href);
-}
-
-async function getTopTracks(token) {
-  const result = await fetch(
-    "https://api.spotify.com/v1/me/top/tracks?limit=10",
-    {
-      method: "GET",
-      headers: { Authorization: `Bearer ${token}` },
-    }
-  );
-
-  const data = await result.json();
-
-  if (data.error) {
-    console.error("Spotify API Error:", data.error); // Log the error
-    return [];
-  }
-
-  return data.items;
-}
-
-function displayTopTracks(tracks) {
-  const tracksContainer = document.getElementById("topTracks");
-  tracksContainer.innerHTML = "<h2>My Top 10 Spotify Songs</h2>";
-  console.log(tracks);
-  console.log(tracks.length);
-
-  if (!tracks || tracks.length === 0) {
-    tracksContainer.innerHTML +=
-      "<p>Could not fetch top tracks. Check your authentication or Spotify activity.</p>";
-    return;
-  }
-
-  tracks.forEach((track, index) => {
-    const trackElement = document.createElement("div");
-    trackElement.classList.add("track");
-
-    trackElement.innerHTML = `
-      <p><strong>${index + 1}. ${track.name}</strong> by ${track.artists
-      .map((artist) => artist.name)
-      .join(", ")}</p>
-      <img src="${track.album.images[0]?.url}" alt="${track.name}" width="100">
-    `;
-
-    tracksContainer.appendChild(trackElement);
-  });
 }
