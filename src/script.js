@@ -9,10 +9,12 @@ if (!accessToken) {
     const profile = await fetchProfile(accessToken);
     const topTracks = await fetchTopTracks(accessToken);
     const currentlyPlaying = await fetchCurrentlyPlaying(accessToken);
+    const queue = await fetchQueue(accessToken);
     console.log(topTracks);
     populateProfile(profile);
     populateTopTracks(topTracks);
     populateCurrentlyPlaying(currentlyPlaying);
+    populateQueue(queue);
   } catch (error) {
     console.error("Error fetching data:", error);
   }
@@ -26,12 +28,31 @@ document.getElementById("add-to-queue").addEventListener("click", async () => {
     if (trackUri) {
       await addToQueue(accessToken, trackUri);
       alert("Song added to queue!");
+      const queue = await fetchQueue(accessToken);
+      populateQueue(queue);
     } else {
       alert("Track not found.");
     }
   } catch (error) {
     console.error("Error adding song to queue:", error);
     alert("Failed to add song to queue.");
+  }
+});
+
+document.getElementById("submit-vote").addEventListener("click", async () => {
+  const selectedRadio = document.querySelector('input[name="vote"]:checked');
+  if (selectedRadio) {
+    const selectedUri = selectedRadio.value;
+    console.log(`Selected song URI: ${selectedUri}`);
+    try {
+      await addToQueue(accessToken, selectedUri);
+      alert("Song added to queue!");
+    } catch (error) {
+      console.error("Error adding song to queue:", error);
+      alert("Failed to add song to queue.");
+    }
+  } else {
+    alert("Please select a song to vote for.");
   }
 });
 
@@ -156,6 +177,20 @@ async function addToQueue(token, songUri) {
   console.log("Song added to queue successfully");
 }
 
+async function fetchQueue(token) {
+  const result = await fetch("https://api.spotify.com/v1/me/player/queue", {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!result.ok) {
+    const error = await result.json();
+    throw new Error(`Error fetching queue: ${error.error.message}`);
+  }
+
+  return await result.json();
+}
+
 function populateProfile(profile) {
   document.getElementById("displayName").innerText = profile.display_name;
   if (profile.images[0]) {
@@ -195,4 +230,19 @@ function populateCurrentlyPlaying(currentlyPlaying) {
   } else {
     currentTrackElement.innerText = "No track currently playing";
   }
+}
+
+function populateQueue(queue) {
+  const queueList = document.getElementById("queue-list");
+  queueList.innerHTML = ""; // Clear the existing queue
+  queue.queue.slice(0, 4).forEach((track, index) => {
+    const listItem = document.createElement("li");
+    listItem.innerHTML = `
+      <input type="radio" name="vote" id="vote-${index}" value="${track.uri}">
+      <label for="vote-${index}">${track.name} by ${track.artists
+      .map((artist) => artist.name)
+      .join(", ")}</label>
+    `;
+    queueList.appendChild(listItem);
+  });
 }
